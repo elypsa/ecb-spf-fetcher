@@ -3,12 +3,22 @@
 import os
 import pandas as pd
 import numpy as np
+import pickle
 
 class SurveyData:
     """
     A class to handle ECB survey data.
+    Methods include:
+    - tidy_survey: Tidy the survey data.
+    - save_data: Save the tidied data to a pickle file.
+    - clean_data: Clean the survey data.
+    - load_files: Load the survey data from CSV files.
     """
     def __init__(self, path):
+        """
+        Initialize the SurveyData class.
+        :param path: Path to the folder containing the CSV files.
+        """
         self.path = path
         self.csv_files = None
         self.data_raw = None
@@ -26,6 +36,11 @@ class SurveyData:
     
     @staticmethod
     def _load_csv(file):
+        """
+        Load a CSV file and return a dictionary of DataFrames.
+        :param file: Path to the CSV file.
+        :return: Dictionary of DataFrames.
+        """
         print(f"Loading {file}")
         df = pd.read_csv(file, usecols=[0], header = None)
         start_pos = df.index[df.iloc[:, 0] == "TARGET_PERIOD"].to_numpy()
@@ -47,12 +62,18 @@ class SurveyData:
         return csv_dict
     
     def load_files(self):
+        """
+        Load the CSV files and store them in a dictionary.
+        """
         if self.csv_files is None: 
             self.list_csv_files()
         
         self.data_raw = {os.path.basename(csv_file): self._load_csv(csv_file) for csv_file in self.csv_files}
         
     def clean_data(self):
+        """
+        Clean the survey data by loading and concatenating all CSV files.
+        """
         if self.data_raw is None:
             self.load_files()
         
@@ -69,6 +90,9 @@ class SurveyData:
     def tidy_survey(self):
         """
         Tidy the survey data.
+        - Reshape the data from wide to long format.
+        - Extract forecast values and types.
+        - Clean and sort the data.
         """
         if self.data is None:
             self.clean_data()
@@ -106,7 +130,7 @@ class SurveyData:
             df["from"] = np.where(df["FORECAST"] == "POINT", np.nan, df["from"])
             df["to"] = np.where(df["FORECAST"] == "POINT", np.nan, df["to"])
             df.dropna(subset=["FORECAST_VALUE"], inplace=True)
-            df = df[df["FORECAST_VALUE"] != 0]
+            df = df[~((df["FORECAST_VALUE"] == 0) & (df["FORECAST_TYPE"] == "DENSITY"))]
             # order by survey_round and TARGET_PERIOD
             df = df.sort_values(by=["survey_round", "TARGET_PERIOD", "FCT_SOURCE", "from", "to"], ignore_index=True)
 
@@ -114,10 +138,20 @@ class SurveyData:
             self.data[key] = df
         return self.data
 
-
+    def save_data(self, filename):
+        """
+        Save the tidied data to a pickle file.
+        """
+        if self.data is None:
+            self.tidy_survey()
+        
+        with open(filename, 'wb') as f:
+            pickle.dump(self.data, f)
        
 
 
 if __name__ == "__main__":
     ecb = SurveyData(path = "data/")
-    ecb.tidy_survey()
+    ecb.save_data("ecb_survey_data.pkl")
+    print("Data tidied and saved to ecb_survey_data.pkl")
+
